@@ -38,9 +38,9 @@ struct OverlayView: View {
 
     var body: some View {
         VStack(spacing: 18) {
-            if Provider.allCases.contains(where: { store.states[$0]?.connected == true }) {
+            if store.shouldShowProviderSwitcher {
                 Picker("Provider", selection: $store.selected) {
-                    ForEach(Provider.allCases) { provider in Text(provider.name).tag(provider) }
+                    ForEach(store.connectedProviders) { provider in Text(provider.name).tag(provider) }
                 }
                 .pickerStyle(.segmented).controlSize(.small).labelsHidden()
                 .accessibilityLabel("Usage provider")
@@ -52,7 +52,7 @@ struct OverlayView: View {
                 emptyContent
             }
 
-            footer
+            if !store.connectedProviders.isEmpty { footer }
         }
         .padding(.horizontal, 18)
         .padding(.top, 22)
@@ -77,13 +77,16 @@ struct OverlayView: View {
     }
 
     private var emptyContent: some View {
-        VStack(spacing: 14) {
-            Text("Connect your subscription.")
-                .font(.system(size: 12)).foregroundStyle(.secondary)
-            Button("Connect an account", action: openSettings)
+        VStack(spacing: 8) {
+            ForEach(Provider.allCases) { provider in
+                Button { Task { await store.connect(provider) } } label: {
+                    Text("Connect \(provider.name)").frame(maxWidth: .infinity)
+                }
                 .buttonStyle(.bordered).controlSize(.small)
+                .help("Read your existing \(provider.product) sign-in on this Mac")
+            }
         }
-        .frame(maxWidth: .infinity).padding(.vertical, 10)
+        .frame(maxWidth: .infinity)
     }
 
     private func window(_ value: UsageWindow?, period: UsagePeriod) -> some View {
@@ -176,7 +179,9 @@ struct SettingsView: View {
                     section("Menu bar") {
                         settingRow("Provider") {
                             Picker("Provider", selection: $store.selected) {
-                                ForEach(Provider.allCases) { Text($0.name).tag($0) }
+                                ForEach(store.connectedProviders.isEmpty ? Provider.allCases : store.connectedProviders) {
+                                    Text($0.name).tag($0)
+                                }
                             }
                         }
                         settingRow("Remaining usage") {

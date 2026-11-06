@@ -207,7 +207,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.terminate(nil)
             return
         }
-        try? await Task.sleep(for: .milliseconds(800))
+        // WindowServer can register a new status item after the app finishes launching.
+        for _ in 0..<50 {
+            if let window = statusItem.button?.window, window.frame.height > 0 { break }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
         presentPopover()
         if !popover.isShown {
             fputs("Popover unavailable: status window=\(String(describing: statusItem.button?.window?.frame)), visible=\(statusItem.button?.window?.isVisible ?? false), button=\(String(describing: statusItem.button?.bounds)), screen=\(String(describing: NSScreen.main?.frame))\n", stderr)
@@ -251,7 +255,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         popover.close()
         try? await Task.sleep(for: .milliseconds(350))
         assert(!popover.isShown)
-        print("UI smoke test passed: popover, provider switch, period switch, appearance, settings, close/reopen.")
+        store.disconnect(.anthropic)
+        assert(!store.shouldShowProviderSwitcher && store.selected == .openai)
+        presentPopover()
+        assert(popover.isShown)
+        assert(popover.contentViewController!.view.fittingSize.height < overlaySize.height)
+        popover.close()
+        try? await Task.sleep(for: .milliseconds(350))
+        store.disconnect(.openai)
+        presentPopover()
+        assert(popover.isShown && store.connectedProviders.isEmpty)
+        assert(popover.contentViewController!.view.fittingSize.height < 140)
+        popover.close()
+        print("UI smoke test passed: popover, 0/1/2 connected providers, period switch, appearance, settings, close/reopen.")
         NSApp.terminate(nil)
     }
 }
@@ -268,6 +284,12 @@ enum PreviewRenderer {
             store.showAvailableResets = true
             try save(OverlayView(store: store, openSettings: {}), name: "overlay-resets-\(appearance.rawValue)", appearance: appearance, to: directory)
             store.showAvailableResets = false
+            for provider in Provider.allCases {
+                let single = UsageStore(defaults: nil, demo: true)
+                single.appearance = appearance
+                single.disconnect(provider == .openai ? .anthropic : .openai)
+                try save(OverlayView(store: single, openSettings: {}), name: "single-\(provider.rawValue)-\(appearance.rawValue)", appearance: appearance, to: directory)
+            }
             let missing = UsageStore(defaults: nil, client: PreviewClient())
             missing.appearance = appearance
             await missing.connect(.openai)

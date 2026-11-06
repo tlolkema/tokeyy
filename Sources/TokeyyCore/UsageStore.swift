@@ -67,8 +67,15 @@ public final class UsageStore {
                 states[provider] = state
             }
         }
+        if states[selected]?.connected != true, let provider = connectedProviders.first {
+            selected = provider
+        }
     }
 
+    public var connectedProviders: [Provider] {
+        Provider.allCases.filter { states[$0]?.connected == true }
+    }
+    public var shouldShowProviderSwitcher: Bool { connectedProviders.count > 1 }
     public var current: ProviderState { states[selected] ?? ProviderState() }
     public var menuPercentage: Int? {
         guard current.connected, current.error == nil, let snapshot = current.snapshot,
